@@ -3085,17 +3085,23 @@ const App = () => {
   }, [matchId]); // Run once on mount
 
   // 2. WRITE: Save to Cloud helper
+  // FIXED: Save to Cloud using dynamic matchId
   const saveToCloud = async (updatedData = {}) => {
+    if (!matchId) return; // Safety: Don't save if no match ID exists
+
     const fullState = {
         runs, wickets, balls, overs,
         strikerId, nonStrikerId, currentBowlerId,
         battingStats, bowlerStats,
         timeline, commentary,
         lastUpdated: new Date().toISOString(),
-        ...updatedData // Overwrite with latest changes
+        gameState, // Important: Save which screen we are on
+        ...updatedData 
     };
+    
     try {
-        await setDoc(doc(db, "matches", MATCH_ID), fullState, { merge: true });
+        // CRITICAL FIX: Use 'matchId' state, not 'MATCH_ID' constant
+        await setDoc(doc(db, "matches", matchId), fullState, { merge: true });
         console.log("☁️ Saved to Cloud");
     } catch (e) {
         console.error("Save Error:", e);
@@ -3260,21 +3266,44 @@ const App = () => {
     setHistoryStack(prev => prev.slice(0, -1));
   };
 
-  const startMatch = (settings) => {
-      setMatchSettings(prev => ({...prev, ...settings}));
-      if (settings.seriesType && settings.seriesType !== 'SINGLE') {
-          setSeriesConfig({
-              active: true,
-              type: settings.seriesType,
-              matchesPlayed: 0,
-              team1Wins: 0,
-              team2Wins: 0,
-              history: [] 
-          });
-      } else {
-          setSeriesConfig(prev => ({ ...prev, active: false }));
+  // FIXED: Start Match with Cloud Creation & URL Update
+  const startMatch = async (settings) => {
+      // 1. Generate a Unique ID
+      const newMatchId = generateId(); 
+      
+      // 2. Prepare Initial Data
+      const initialData = {
+          id: newMatchId,
+          createdAt: new Date().toISOString(),
+          lastUpdated: new Date().toISOString(),
+          matchSettings: { ...matchSettings, ...settings },
+          gameState: 'TOSS',
+          runs: 0, wickets: 0, balls: 0, overs: 0,
+          strikerId: null, nonStrikerId: null, currentBowlerId: null,
+          battingStats: {}, bowlerStats: {},
+          timeline: [], commentary: [],
+          // Save copies of teams/players so match works even if they are deleted later
+          playerPool: playerPool, 
+          savedTeams: savedTeams
+      };
+
+      try {
+          // 3. Save to Cloud FIRST
+          await setDoc(doc(db, "matches", newMatchId), initialData);
+          console.log("Match Created:", newMatchId);
+          
+          // 4. Update URL (The "Resume" Key)
+          const newUrl = `${window.location.pathname}?matchId=${newMatchId}`;
+          window.history.pushState({ path: newUrl }, '', newUrl);
+
+          // 5. Update Local State
+          setMatchId(newMatchId);
+          setMatchSettings(prev => ({...prev, ...settings}));
+          setGameState('TOSS');
+      } catch (e) {
+          console.error("Error creating match:", e);
+          alert("Could not start match. Check internet connection.");
       }
-      setGameState('TOSS');
   };
 
   const nextMatchInSeries = () => {
