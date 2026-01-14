@@ -4239,7 +4239,38 @@ const nonStriker = getPlayer(nonStrikerId);
 const bowler = getPlayer(currentBowlerId);
 
 // AFTER (Seamless Pitch Black)
+// --- NEW: HANDLE EXIT MATCH ---
+  // This function safely closes the current match view without deleting data
+  const handleExitMatch = () => {
+    // 1. Confirm Intent
+    if (!confirm("Exit to Main Menu? \n\nThe match is saved in the cloud. You can resume it anytime using the Resume feature.")) {
+        return;
+    }
+
+    // 2. Clear the URL (Prevent auto-resume on refresh)
+    // This removes '?matchId=...' from the address bar
+    const cleanUrl = window.location.pathname;
+    window.history.pushState({}, '', cleanUrl);
+
+    // 3. Detach from Cloud Match (Stops the Firebase listener)
+    setMatchId(null);
+
+    // 4. Reset Local State to Safe Defaults (Clean the RAM)
+    setGameState('SETUP');
+    setRuns(0);
+    setWickets(0);
+    setOvers(0);
+    setBalls(0);
+    setTimeline([]);
+    setCommentary([]);
+    setStrikerId(null);
+    setNonStrikerId(null);
+    setCurrentBowlerId(null);
+  };
+
+  // ---------------------------------------------------------
 return (
+  
   <div className="min-h-screen bg-black text-slate-100 font-sans pb-24 selection:bg-orange-500/30">
      
       {/* MODALS */}
@@ -4636,6 +4667,14 @@ return (
               </div>
           </div>
           <div className="flex gap-2">
+            {/* --- NEW: EXIT BUTTON --- */}
+  <button 
+    onClick={handleExitMatch} 
+    className="w-10 h-10 flex items-center justify-center bg-red-900/20 text-red-500 hover:bg-red-600 hover:text-white rounded-full transition-colors border border-red-500/30 active:scale-90"
+    title="Exit to Menu"
+  >
+    <LogOut size={18} />
+  </button>
   {/* UNDO BUTTON */}
   <button onClick={undo} className="w-10 h-10 flex items-center justify-center bg-neutral-800 text-slate-300 hover:text-white hover:bg-neutral-700 rounded-full transition-colors border border-white/10 active:scale-90">
     <Undo size={18}/>
