@@ -3499,6 +3499,8 @@ const App = () => {
     // Update State
     setBattingStats(newBattingStats);
     setBowlerStats(newBowlerStats);
+   // --- CLOUD SAVE ---
+    // We use 'commentary' (the state variable) instead of 'prev'
     // --- CLOUD SAVE ---
     saveToCloud({
         runs: newTotalScore,
@@ -3507,7 +3509,8 @@ const App = () => {
         battingStats: newBattingStats,
         bowlerStats: newBowlerStats,
         timeline: [...(timeline || []), newTimelineEntry],
-        commentary: [comm, ...(prev || [])]
+        // FIX: Use 'commentary' state instead of 'prev'
+        commentary: [comm, ...(commentary || [])]
     });
 
     const historyLabel = extraType ? (runValue > 0 ? `${extraType}+${runValue}` : extraType) : label;
