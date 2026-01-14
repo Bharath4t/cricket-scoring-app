@@ -7,8 +7,11 @@ import {
   Settings, Plus, Trash2, Upload, Camera, Save, Download, FileJson, RefreshCw,
   BarChart2, Star,UserPlus, TrendingUp, Activity, AlertTriangle, LogOut, HeartPulse,
   Shield, Target, Award, Coins, Mic, Zap, Search, Crown, History, Calendar,
-  Hand, BoxSelect, Medal ,Footprints, Gavel // <--- ADDED THESE
+  Hand, BoxSelect, Medal ,Footprints, Gavel
+   // <--- ADDED THESE
 } from 'lucide-react';
+import { db } from './firebase';
+import { doc, setDoc, onSnapshot } from "firebase/firestore";
 // --- IMPORT YOUR LOGO HERE ---
 import appLogo from './logo.png';
 // --- 1. CONSTANTS & UTILS ---
@@ -3022,6 +3025,51 @@ const App = () => {
   
   const [timeline, setTimeline] = useState([]); // Timeline for worm graph
   const [isLoaded, setIsLoaded] = useState(false);
+  // --- CLOUD SYNC LOGIC ---
+  const MATCH_ID = "live_match_001"; // We will use this ID for now
+
+  // 1. LISTEN: Update local app when Cloud changes (Real-time)
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "matches", MATCH_ID), (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        // Only update if data is different to prevent loops
+        if (data.runs !== runs || data.wickets !== wickets || data.balls !== balls) {
+            setRuns(data.runs || 0);
+            setWickets(data.wickets || 0);
+            setBalls(data.balls || 0);
+            setOvers(data.overs || 0);
+            if(data.battingStats) setBattingStats(data.battingStats);
+            if(data.bowlerStats) setBowlerStats(data.bowlerStats);
+            if(data.strikerId) setStrikerId(data.strikerId);
+            if(data.nonStrikerId) setNonStrikerId(data.nonStrikerId);
+            if(data.currentBowlerId) setCurrentBowlerId(data.currentBowlerId);
+            if(data.timeline) setTimeline(data.timeline);
+            if(data.commentary) setCommentary(data.commentary);
+            console.log("☁️ Synced from Cloud");
+        }
+      }
+    });
+    return () => unsub();
+  }, []); // Run once on mount
+
+  // 2. WRITE: Save to Cloud helper
+  const saveToCloud = async (updatedData = {}) => {
+    const fullState = {
+        runs, wickets, balls, overs,
+        strikerId, nonStrikerId, currentBowlerId,
+        battingStats, bowlerStats,
+        timeline, commentary,
+        lastUpdated: new Date().toISOString(),
+        ...updatedData // Overwrite with latest changes
+    };
+    try {
+        await setDoc(doc(db, "matches", MATCH_ID), fullState, { merge: true });
+        console.log("☁️ Saved to Cloud");
+    } catch (e) {
+        console.error("Save Error:", e);
+    }
+  };
 // START OF PART 17
   // CALCULATE CRR & RRR HERE
   let target = null;
@@ -3451,6 +3499,16 @@ const App = () => {
     // Update State
     setBattingStats(newBattingStats);
     setBowlerStats(newBowlerStats);
+    // --- CLOUD SAVE ---
+    saveToCloud({
+        runs: newTotalScore,
+        balls: nextBalls,
+        overs: nextOvers,
+        battingStats: newBattingStats,
+        bowlerStats: newBowlerStats,
+        timeline: [...(timeline || []), newTimelineEntry],
+        commentary: [comm, ...(prev || [])]
+    });
 
     const historyLabel = extraType ? (runValue > 0 ? `${extraType}+${runValue}` : extraType) : label;
     setCurrentOverHistory(prev => [...(prev || []), historyLabel]);
@@ -4053,22 +4111,64 @@ const handleExportData = () => {
 };
 
 const handleImportData = (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (event) => {
-    try {
-      const parsed = JSON.parse(event.target.result);
-      if (parsed.playerPool) setPlayerPool(parsed.playerPool);
-      if (parsed.savedTeams) setSavedTeams(parsed.savedTeams);
-      if (parsed.matchHistory) setMatchHistory(parsed.matchHistory);
-      if (parsed.seriesConfig) setSeriesConfig(parsed.seriesConfig);
-      alert("Data restored successfully!");
-    } catch (err) { alert("Invalid backup file."); }
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target.result);
+        if (parsed.playerPool) setPlayerPool(parsed.playerPool);
+        if (parsed.savedTeams) setSavedTeams(parsed.savedTeams);
+        if (parsed.matchHistory) setMatchHistory(parsed.matchHistory);
+        if (parsed.seriesConfig) setSeriesConfig(parsed.seriesConfig);
+        alert("Data restored successfully!");
+      } catch (err) { alert("Invalid backup file."); }
+    };
+    reader.readAsText(file);
+    e.target.value = null;
   };
-  reader.readAsText(file);
-  e.target.value = null;
-};
+
+  // --- NEW: Handle Batsman Selection (Smart Logic) ---
+  const handleBatsmanSelect = (playerId, isResuming) => {
+    // 1. Handling Retired Player Resuming
+    if (isResuming) {
+        const saved = retiredHurtPlayers.find(p => p.id === playerId);
+        const savedStats = saved ? saved.stats : { runs: 0, balls: 0, fours: 0, sixes: 0 };
+        
+        // Put them in the empty slot
+        if (!strikerId) {
+            setStrikerId(playerId);
+            setStrikerStats(savedStats);
+        } else {
+            setNonStrikerId(playerId);
+            setNonStrikerStats(savedStats);
+        }
+        setRetiredHurtPlayers(prev => prev.filter(p => p.id !== playerId));
+    } 
+    // 2. Handling Fresh Batsman
+    else {
+        // Smart Check: Fill ONLY the empty slot
+        if (!strikerId) {
+            setStrikerId(playerId);
+            setStrikerStats({ runs: 0, balls: 0, fours: 0, sixes: 0 });
+        } else {
+            setNonStrikerId(playerId);
+            setNonStrikerStats({ runs: 0, balls: 0, fours: 0, sixes: 0 });
+        }
+
+        // Add to Batting Order if new
+        if (!battingOrder.includes(playerId)) {
+            setBattingOrder(prev => [...prev, playerId]);
+        }
+    }
+
+    setActiveModal(null);
+
+    // 3. Trigger Bowler Selection if needed (Start of new over)
+    if (balls === 0 && overs > 0 && currentOverHistory.length === 0) {
+        setTimeout(() => setActiveModal('BOWLER'), 100);
+    }
+  };
 
 // START OF PART 22
 const striker = getPlayer(strikerId);
@@ -4145,7 +4245,17 @@ return (
       
       {activeModal === 'RETIRE_OPTIONS' && <Modal title="Retire" onClose={() => setActiveModal(null)}><div className="space-y-4"><button onClick={() => { handleRetire('HURT'); }} className="w-full p-4 bg-orange-700/50 border border-orange-500 rounded-xl flex gap-4"><HeartPulse className="text-orange-400"/><div><div className="font-bold">Retire Hurt</div><div className="text-xs text-slate-300">Can return later</div></div></button></div></Modal>}
       {activeModal === 'OPENERS' && <OpenersModal squad={getBattingSquad()} teamName={savedTeams.find(t=>t.id === getCurrentBattingTeamId())?.name} onSelect={(sId, nsId) => { setStrikerId(sId); setNonStrikerId(nsId); setStrikerStats({runs: 0, balls: 0, fours: 0, sixes: 0}); setNonStrikerStats({runs: 0, balls: 0, fours: 0, sixes: 0}); setBattingOrder([sId, nsId]); setActiveModal('BOWLER'); }} onClose={() => {}} />}
-      {(activeModal === 'SELECT_BATSMAN' || activeModal === 'CHANGE_BATSMAN') && <PlayerSelectionModal title={activeModal === 'CHANGE_BATSMAN' ? "Edit Batsman" : "New Batsman"} squad={getBattingSquad()} retiredHurtPlayers={retiredHurtPlayers} excludeIds={[strikerId, nonStrikerId, ...outPlayers.map(o => o.playerId), ...retiredPlayers]} onSelect={(pid, isResuming) => { setStrikerId(pid); if (isResuming) { const saved = retiredHurtPlayers.find(p => p.id === pid); setStrikerStats(saved ? saved.stats : {runs: 0, balls: 0, fours: 0, sixes: 0}); setRetiredHurtPlayers(prev => prev.filter(p => p.id !== pid)); } else { if (activeModal === 'SELECT_BATSMAN') setStrikerStats({runs: 0, balls: 0, fours: 0, sixes: 0}); if(!battingOrder.includes(pid)) setBattingOrder(prev => [...prev, pid]); } setActiveModal(null); if (balls === 0 && overs > 0 && currentOverHistory.length === 0) setActiveModal('BOWLER'); }} onClose={() => setActiveModal(null)} />}
+      
+      {(activeModal === 'SELECT_BATSMAN' || activeModal === 'CHANGE_BATSMAN') && (
+        <PlayerSelectionModal 
+            title={activeModal === 'CHANGE_BATSMAN' ? "Edit Batsman" : "New Batsman"} 
+            squad={getBattingSquad()} 
+            retiredHurtPlayers={retiredHurtPlayers} 
+            excludeIds={[strikerId, nonStrikerId, ...outPlayers.map(o => o.playerId), ...retiredPlayers].filter(Boolean)} 
+            onSelect={handleBatsmanSelect} 
+            onClose={() => setActiveModal(null)} 
+        />
+      )}
 
 {/* NEW: Change Non-Striker Modal */}
 {activeModal === 'CHANGE_NON_STRIKER' && <PlayerSelectionModal title="Change Non-Striker" squad={getBattingSquad()} retiredHurtPlayers={retiredHurtPlayers} excludeIds={[strikerId, nonStrikerId, ...outPlayers.map(o => o.playerId), ...retiredPlayers]} onSelect={(pid, isResuming) => { setNonStrikerId(pid); setNonStrikerStats({runs: 0, balls: 0, fours: 0, sixes: 0}); if(!battingOrder.includes(pid)) setBattingOrder(prev => [...prev, pid]); setActiveModal(null); }} onClose={() => setActiveModal(null)} />}
