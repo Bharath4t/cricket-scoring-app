@@ -3025,33 +3025,64 @@ const App = () => {
   
   const [timeline, setTimeline] = useState([]); // Timeline for worm graph
   const [isLoaded, setIsLoaded] = useState(false);
-  // --- CLOUD SYNC LOGIC ---
-  const MATCH_ID = "live_match_001"; // We will use this ID for now
+  // --- CLOUD SYNC LOGIC (Dynamic) ---
+  const [matchId, setMatchId] = useState(null); 
 
-  // 1. LISTEN: Update local app when Cloud changes (Real-time)
+  // 1. BOOTSTRAP: On Load, check URL for matchId
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, "matches", MATCH_ID), (doc) => {
-      if (doc.exists()) {
-        const data = doc.data();
-        // Only update if data is different to prevent loops
-        if (data.runs !== runs || data.wickets !== wickets || data.balls !== balls) {
-            setRuns(data.runs || 0);
-            setWickets(data.wickets || 0);
-            setBalls(data.balls || 0);
-            setOvers(data.overs || 0);
-            if(data.battingStats) setBattingStats(data.battingStats);
-            if(data.bowlerStats) setBowlerStats(data.bowlerStats);
-            if(data.strikerId) setStrikerId(data.strikerId);
-            if(data.nonStrikerId) setNonStrikerId(data.nonStrikerId);
-            if(data.currentBowlerId) setCurrentBowlerId(data.currentBowlerId);
-            if(data.timeline) setTimeline(data.timeline);
-            if(data.commentary) setCommentary(data.commentary);
-            console.log("☁️ Synced from Cloud");
+    const params = new URLSearchParams(window.location.search);
+    const urlMatchId = params.get('matchId');
+    if (urlMatchId) {
+      console.log("Resuming match from URL:", urlMatchId);
+      setMatchId(urlMatchId); 
+    }
+  }, []);
+
+  // 2. SYNC: Listen to the specific matchId
+  useEffect(() => {
+    if (!matchId) return;
+
+    console.log("Subscribing to match:", matchId);
+    const matchRef = doc(db, "matches", matchId);
+    const unsubscribe = onSnapshot(matchRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+
+        // HYDRATE STATE (Load Cloud Data into RAM)
+        // We use || defaults to prevent crashes if fields are missing
+        setRuns(data.runs || 0);
+        setWickets(data.wickets || 0);
+        setBalls(data.balls || 0);
+        setOvers(data.overs || 0);
+        setBattingStats(data.battingStats || {});
+        setBowlerStats(data.bowlerStats || {});
+        setTimeline(data.timeline || []);
+        setCommentary(data.commentary || []);
+
+        // Restore Context
+        if(data.strikerId) setStrikerId(data.strikerId);
+        if(data.nonStrikerId) setNonStrikerId(data.nonStrikerId);
+        if(data.currentBowlerId) setCurrentBowlerId(data.currentBowlerId);
+        if(data.battingOrder) setBattingOrder(data.battingOrder);
+        if(data.matchSettings) setMatchSettings(data.matchSettings);
+        if(data.playerPool) setPlayerPool(data.playerPool);
+        if(data.savedTeams) setSavedTeams(data.savedTeams);
+
+        // FORCE NAVIGATION (Jump to the game screen if needed)
+        if (data.gameState && gameState === 'SETUP') {
+            setGameState(data.gameState);
         }
+      } else {
+        console.error("Match ID not found in database!");
+        alert("Match not found! Returning to home.");
+        setMatchId(null);
+        // Optional: Clear URL
+        window.history.pushState({}, '', window.location.pathname);
       }
     });
-    return () => unsub();
-  }, []); // Run once on mount
+
+    return () => unsubscribe();
+  }, [matchId]); // Run once on mount
 
   // 2. WRITE: Save to Cloud helper
   const saveToCloud = async (updatedData = {}) => {
@@ -3509,8 +3540,8 @@ const App = () => {
         battingStats: newBattingStats,
         bowlerStats: newBowlerStats,
         timeline: [...(timeline || []), newTimelineEntry],
-        // FIX: Use 'commentary' state instead of 'prev'
-        commentary: [comm, ...(commentary || [])]
+        // FIX IS HERE: Use 'commentary' instead of 'prev'
+        commentary: [comm, ...(commentary || [])] 
     });
 
     const historyLabel = extraType ? (runValue > 0 ? `${extraType}+${runValue}` : extraType) : label;
