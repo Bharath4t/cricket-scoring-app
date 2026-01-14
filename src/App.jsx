@@ -2558,9 +2558,12 @@ const ScorecardModal = ({ matchSettings, teamName, data, players, onClose, batti
   );
 };
 // START OF PART 16 - PREMIUM WICKET MODAL (Nightfire Edition)
-const WicketModal = ({ squad, onConfirm, onClose }) => {
+export const WicketModal = ({ squad, striker, nonStriker, onConfirm, onClose }) => {
   const [type, setType] = useState('Caught');
   const [fielder, setFielder] = useState('');
+  // Default victim is the Striker
+  const [victimId, setVictimId] = useState(striker?.id);
+  
   const needsFielder = ['Caught', 'Run Out', 'Stumped'].includes(type);
   const validSquad = squad || [];
 
@@ -2634,6 +2637,27 @@ const WicketModal = ({ squad, onConfirm, onClose }) => {
            </div>
         </div>
 
+        {/* VICTIM SELECTION (For Run Outs) */}
+        {type === 'Run Out' && (
+           <div className="animate-in fade-in slide-in-from-bottom-2">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">Who is Out?</label>
+              <div className="flex gap-2">
+                 <button 
+                    onClick={() => setVictimId(striker?.id)} 
+                    className={`flex-1 py-3 rounded-xl border font-bold text-xs transition-colors ${victimId === striker?.id ? 'bg-red-600 border-red-500 text-white' : 'bg-neutral-800 border-white/10 text-slate-400'}`}
+                 >
+                    {striker?.name || 'Striker'}
+                 </button>
+                 <button 
+                    onClick={() => setVictimId(nonStriker?.id)} 
+                    className={`flex-1 py-3 rounded-xl border font-bold text-xs transition-colors ${victimId === nonStriker?.id ? 'bg-red-600 border-red-500 text-white' : 'bg-neutral-800 border-white/10 text-slate-400'}`}
+                 >
+                    {nonStriker?.name || 'Non-Striker'}
+                 </button>
+              </div>
+           </div>
+        )}
+
         {/* FIELDER SELECTION (If Needed) */}
         {needsFielder && (
            <div className="animate-in fade-in slide-in-from-bottom-2">
@@ -2653,7 +2677,7 @@ const WicketModal = ({ squad, onConfirm, onClose }) => {
         )}
 
         <Button
-           onClick={() => onConfirm(type, fielder)}
+           onClick={() => onConfirm(type, fielder, victimId)}
            disabled={needsFielder && !fielder}
            className="w-full py-4 text-lg font-black uppercase tracking-widest bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 shadow-lg shadow-red-900/40 border border-red-500/30 mt-2"
         >
@@ -3501,14 +3525,15 @@ const App = () => {
     checkMatchEnd(newTotalScore, newBattingStats, newBowlerStats);
   };
 
-  const confirmWicket = (type, fielderId = null) => {
+  const confirmWicket = (type, fielderId = null, victimId = strikerId) => {
     const currentTotalBalls = overs * 6 + balls;
     const maxBalls = matchSettings.totalOvers * 6;
     if (currentTotalBalls >= maxBalls) return;
 
     pushHistory();
-   
+
     // 1. Prepare New Stats
+    // Even if Non-Striker is out, the ball counts as a ball faced for the Striker (Run Out legal ball)
     const currentStrikerStats = battingStats[strikerId] || { runs: 0, balls: 0, fours: 0, sixes: 0 };
     const newBattingStats = {
         ...battingStats,
@@ -3519,24 +3544,39 @@ const App = () => {
     };
     setBattingStats(newBattingStats);
 
-    // 2. Record Wicket
-    const outData = { playerId: strikerId, runs: strikerStats.runs, balls: strikerStats.balls + 1, howOut: type, fielderId, bowlerId: currentBowlerId, fours: strikerStats.fours, sixes: strikerStats.sixes };
+    // 2. Identify Stats for the Victim (The one actually getting out)
+    const isStrikerOut = victimId === strikerId;
+    const victimStats = isStrikerOut ? { ...strikerStats, balls: strikerStats.balls + 1 } : nonStrikerStats;
+
+    // 3. Record Wicket
+    const outData = { 
+        playerId: victimId, 
+        runs: victimStats.runs, 
+        // For striker, we added a ball. For non-striker, their balls faced doesn't increment on this ball
+        balls: victimStats.balls, 
+        howOut: type, 
+        fielderId, 
+        bowlerId: currentBowlerId, 
+        fours: victimStats.fours, 
+        sixes: victimStats.sixes 
+    };
+    
     const newOutPlayers = [...outPlayers, outData];
     setOutPlayers(newOutPlayers);
-   
-    // 3. Increment Wickets
+
+    // 4. Increment Wickets
     const newWickets = wickets + 1;
     setWickets(newWickets);
     setScoreAtLastWicket(runs);
     setBallsAtLastWicket(currentTotalBalls + 1);
 
-    // 4. Update Timeline
+    // 5. Update Timeline
     const currentTotalOvers = overs + (balls / 6);
     const newTimelineEntry = {
         totalRuns: runs,
         runRate: runs / (currentTotalOvers || 1),
         isWicket: true,
-        strikerId,
+        strikerId: strikerId, // Striker is still the one facing
         bowlerId: currentBowlerId,
         ballRuns: 0
     };
@@ -3546,12 +3586,12 @@ const App = () => {
     setCurrentOverHistory(prev => [...prev, 'W']);
     const comm = generateCommentary(getPlayer(currentBowlerId).name, getPlayer(strikerId).name, 0, null, type);
     setCommentary(prev => [comm, ...prev]);
-   
-    // 5. Update Balls/Overs
+
+    // 6. Update Balls/Overs
     let newBalls = balls + 1;
     let isOverEnd = false;
     let nextOvers = overs;
-   
+
     if (newBalls === 6) {
         setBalls(0);
         setOvers(prev => prev + 1);
@@ -3563,14 +3603,14 @@ const App = () => {
         setBalls(newBalls);
     }
 
-    // 6. Update Bowler Stats
+    // 7. Update Bowler Stats
     let newBowlerStats = { ...bowlerStats };
     if (currentBowlerId) {
         const stats = newBowlerStats[currentBowlerId] || { overs: 0, runs: 0, wickets: 0, balls: 0, maidens: 0, legalBalls: 0 };
         let bBalls = stats.balls + 1;
         let bOvers = stats.overs;
         if (bBalls === 6) { bOvers += 1; bBalls = 0; }
-       
+
         newBowlerStats[currentBowlerId] = {
             ...stats,
             wickets: stats.wickets + 1,
@@ -3580,53 +3620,52 @@ const App = () => {
         };
     }
     setBowlerStats(newBowlerStats);
-   
-    // Reset Striker
-    setStrikerStats({ runs: 0, balls: 0, fours: 0, sixes: 0 });
-    setStrikerId(null);
 
-    // --- CRITICAL LOGIC FIXES START HERE ---
+    // 8. Remove the Victim from the crease
+    if (isStrikerOut) {
+        setStrikerStats({ runs: 0, balls: 0, fours: 0, sixes: 0 });
+        setStrikerId(null); // Striker slot empty
+    } else {
+        setNonStrikerStats({ runs: 0, balls: 0, fours: 0, sixes: 0 });
+        setNonStrikerId(null); // Non-Striker slot empty
+    }
 
     // A. Check if Overs Completed
     if (isOverEnd && nextOvers === matchSettings.totalOvers) {
-         handleInningsEnd(runs, nextOvers, 0, newBattingStats, newBowlerStats, finalTimeline, newOutPlayers, newWickets);
-         return;
+        handleInningsEnd(runs, nextOvers, 0, newBattingStats, newBowlerStats, finalTimeline, newOutPlayers, newWickets);
+        return;
     }
 
     const squadSize = getBattingSquad().length;
-   
-    // B. Calculate "All Out" based on LMS Rule
-    // LMS ON: Play until squadSize (everyone is out).
-    // LMS OFF: Play until squadSize - 1 (standard cricket).
+
+    // B. Calculate "All Out"
     const isAllOut = matchSettings.lastManStanding
         ? newWickets >= squadSize
         : newWickets >= squadSize - 1;
 
     if (isAllOut) {
-       handleInningsEnd(runs, isOverEnd ? nextOvers : overs, isOverEnd ? 0 : newBalls, newBattingStats, newBowlerStats, finalTimeline, newOutPlayers, newWickets);
+        handleInningsEnd(runs, isOverEnd ? nextOvers : overs, isOverEnd ? 0 : newBalls, newBattingStats, newBowlerStats, finalTimeline, newOutPlayers, newWickets);
     } else {
-       // C. Handle LMS Transition (When last partner gets out)
-       // This triggers when Wickets == Squad - 1 (e.g., 10th wicket in 11-man team)
-       if (matchSettings.lastManStanding && newWickets === squadSize - 1) {
-           if (nonStrikerId) {
-               // Make the non-striker the main striker
-               setStrikerId(nonStrikerId);
-               setStrikerStats(nonStrikerStats);
-               // Remove non-striker (He plays alone now)
-               setNonStrikerId(null);
-               setNonStrikerStats({ runs: 0, balls: 0, fours: 0, sixes: 0 });
-               // DO NOT SHOW POPUP -> Just Select Bowler if over ended
-               if (isOverEnd) setTimeout(() => setActiveModal('BOWLER'), 0);
-           } else {
-               // Rare edge case: No non-striker found? Ask for one.
-               setActiveModal('SELECT_BATSMAN');
-           }
-       } else {
-           // Standard Wicket: Ask for next batsman
-           setActiveModal('SELECT_BATSMAN');
-       }
+        // C. Next Batsman Logic
+        if (matchSettings.lastManStanding && newWickets === squadSize - 1) {
+            // LMS: If Non-Striker was out, Striker stays. If Striker was out, Non-Striker becomes Striker.
+            if (!isStrikerOut) {
+                 // Non-Striker got out. Striker stays alone.
+                 setNonStrikerId(null);
+            } else {
+                // Striker got out. Non-Striker exists and becomes Main Striker.
+                setStrikerId(nonStrikerId);
+                setStrikerStats(nonStrikerStats);
+                setNonStrikerId(null);
+                setNonStrikerStats({ runs: 0, balls: 0, fours: 0, sixes: 0 });
+            }
+            if (isOverEnd) setTimeout(() => setActiveModal('BOWLER'), 0);
+        } else {
+            // Standard Wicket: Ask for next batsman
+            setActiveModal('SELECT_BATSMAN');
+        }
     }
-};
+  };
 // --- NEW FEATURE: ADD PLAYER DURING MATCH ---
 const handleAddLatecomer = (teamId, playerDetails, isNewPlayer) => {
   let playerId = playerDetails.id;
@@ -4102,7 +4141,7 @@ return (
           </div>
       </Modal>}
       
-      {activeModal === 'WICKET_DETAIL' && <WicketModal squad={getBowlingSquad()} onConfirm={(type, fielder) => { confirmWicket(type, fielder); }} onClose={() => setActiveModal(null)} />}
+      {activeModal === 'WICKET_DETAIL' && <WicketModal squad={getBowlingSquad()} striker={striker} nonStriker={nonStriker} onConfirm={(type, fielder, victim) => { confirmWicket(type, fielder, victim); }} onClose={() => setActiveModal(null)} />}
       
       {activeModal === 'RETIRE_OPTIONS' && <Modal title="Retire" onClose={() => setActiveModal(null)}><div className="space-y-4"><button onClick={() => { handleRetire('HURT'); }} className="w-full p-4 bg-orange-700/50 border border-orange-500 rounded-xl flex gap-4"><HeartPulse className="text-orange-400"/><div><div className="font-bold">Retire Hurt</div><div className="text-xs text-slate-300">Can return later</div></div></button></div></Modal>}
       {activeModal === 'OPENERS' && <OpenersModal squad={getBattingSquad()} teamName={savedTeams.find(t=>t.id === getCurrentBattingTeamId())?.name} onSelect={(sId, nsId) => { setStrikerId(sId); setNonStrikerId(nsId); setStrikerStats({runs: 0, balls: 0, fours: 0, sixes: 0}); setNonStrikerStats({runs: 0, balls: 0, fours: 0, sixes: 0}); setBattingOrder([sId, nsId]); setActiveModal('BOWLER'); }} onClose={() => {}} />}
@@ -4477,7 +4516,22 @@ return (
                <div className="flex items-center p-3 bg-black/40 border-t border-white/5"><PlayerAvatar player={nonStriker} size="sm" /><div className="ml-4 flex-1 flex justify-between items-center opacity-60"><span className="font-medium text-sm text-slate-300">{nonStriker.name}</span><span className="font-mono text-sm text-slate-400 font-bold">{nonStrikerStats.runs} <span className="text-[10px] font-normal">({nonStrikerStats.balls})</span></span></div></div>
             )}
           </div>
-
+{/* MANUAL SWAP BUTTON */}
+          <div className="flex justify-end mb-4 pr-1">
+             <button 
+                 onClick={() => {
+                     setStrikerId(nonStrikerId);
+                     setNonStrikerId(strikerId);
+                     const tempStats = strikerStats;
+                     setStrikerStats(nonStrikerStats);
+                     setNonStrikerStats(tempStats);
+                 }}
+                 disabled={!nonStrikerId}
+                 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:text-orange-500 transition-colors flex items-center gap-1 bg-neutral-900 border border-white/10 px-3 py-1.5 rounded-full"
+             >
+                 <RefreshCw size={10} /> Swap Ends
+             </button>
+          </div>
           {/* BOWLER CARD - NOW CLICKABLE */}
   <div className="bg-neutral-900 border border-white/10 rounded-3xl p-5 mb-6 shadow-xl relative overflow-hidden group">
     <div className="flex justify-between items-start mb-4">
