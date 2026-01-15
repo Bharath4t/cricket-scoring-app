@@ -2351,23 +2351,34 @@ const PlayerSelectionModal = ({ title, squad, excludeIds, retiredHurtPlayers, on
 const BowlerSelectionModal = ({ currentOver, squad, lastBowlerId, onSelect, bowlerStats, maxOvers }) => {
   const statsMap = bowlerStats || {};
   const safeSquad = squad || [];
-  const limit = maxOvers || Infinity;
+  // FIX: Force limit to be a valid number, or Infinity if not set
+  const limit = (maxOvers && parseInt(maxOvers) > 0) ? parseInt(maxOvers) : Infinity;
 
   const availableBowlers = safeSquad.filter(p => {
+    // 1. Exclude current bowler (standard rule)
     if (p.id === lastBowlerId) return false;
-    const stats = statsMap[p.id] || { legalBalls: 0 };
-    const oversBowled = Math.floor(stats.legalBalls / 6);
+    
+    // FIX: Safely access legalBalls. Default to 0 if missing.
+    const stats = statsMap[p.id] || {};
+    const legal = stats.legalBalls || 0;
+    const oversBowled = Math.floor(legal / 6);
+    
     return oversBowled < limit;
   });
 
   return (
     <Modal title={`Select Bowler: Over ${currentOver}`} onClose={() => {}}>
       <div className="grid grid-cols-1 gap-2 max-h-[500px] overflow-y-auto custom-scrollbar pr-1">
-        {availableBowlers.length === 0 && <p className="text-center text-slate-500 py-10 italic">No bowlers available (Limit: {limit} overs)</p>}
+        {availableBowlers.length === 0 && (
+            <p className="text-center text-slate-500 py-10 italic">
+                No eligible bowlers found.<br/>(Check bowler limits)
+            </p>
+        )}
        
         {availableBowlers.map(p => {
            const stats = statsMap[p.id] || { runs: 0, wickets: 0, legalBalls: 0 };
-           const overs = Math.floor(stats.legalBalls / 6) + '.' + (stats.legalBalls % 6);
+           const legal = stats.legalBalls || 0;
+           const overs = Math.floor(legal / 6) + '.' + (legal % 6);
            
            return (
              <button key={p.id} onClick={() => onSelect(p.id)} className="group flex items-center justify-between p-3 bg-neutral-900 border border-white/5 hover:bg-black hover:border-orange-500/50 rounded-xl transition-all shadow-md">
@@ -2379,12 +2390,11 @@ const BowlerSelectionModal = ({ currentOver, squad, lastBowlerId, onSelect, bowl
                    </div>
                 </div>
                
-                {/* LIVE STATS BADGE */}
-                {stats.legalBalls > 0 ? (
+                {legal > 0 ? (
                    <div className="text-right">
                       <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Figures</div>
                       <div className="text-xs font-mono font-bold text-orange-400 bg-orange-900/10 px-2 py-1 rounded border border-orange-500/20">
-                         {overs} - {stats.runs} - {stats.wickets}
+                         {overs} - {stats.runs || 0} - {stats.wickets || 0}
                       </div>
                    </div>
                 ) : (
@@ -3198,11 +3208,11 @@ const App = () => {
   
   // FIX 2: Robust Team Lookup - Filters out bad data
   const getTeamPlayers = (teamId) => {
-    // Safety check: ensure savedTeams is an array
     const validTeams = Array.isArray(savedTeams) ? savedTeams : [];
-    const team = validTeams.find(t => t && t.id === teamId);
+    // FIX: Convert IDs to String() to ensure "1" matches 1. 
+    // This fixes the empty squad bug.
+    const team = validTeams.find(t => t && String(t.id) === String(teamId));
     
-    // Filter ensures no undefined values are passed to components
     return team && Array.isArray(team.players) 
         ? team.players.map(pid => getPlayer(pid)).filter(p => p && p.id) 
         : [];
