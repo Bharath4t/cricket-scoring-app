@@ -1790,7 +1790,7 @@ const TeamManagerModal = ({ teams, setTeams, players, onClose }) => {
   );
 };
 // START OF PART 12 - PREMIUM SETUP SCREEN (Nightfire Edition)
-const SetupScreen = ({ teams, players, onStart, onManagePlayers, onManageTeams,resumeId, onResume, onManagePlayers, onOpenRankings, onOpenProfiles, onExport, onImport, onOpenArchives, onRequestReset }) => {
+const SetupScreen = ({ teams, players, onStart, onManagePlayers, onManageTeams, resumeId, onResume, onOpenRankings, onOpenProfiles, onExport, onImport, onOpenArchives, onRequestReset }) => {
   const [t1Id, setT1Id] = useState(teams[0]?.id || '');
   const [t2Id, setT2Id] = useState(teams[1]?.id || '');
   const [jokerId, setJokerId] = useState('');
@@ -4711,10 +4711,8 @@ return (
   >
     <LogOut size={18} />
   </button>
-  {/* UNDO BUTTON */}
-  <button onClick={undo} className="w-10 h-10 flex items-center justify-center bg-neutral-800 text-slate-300 hover:text-white hover:bg-neutral-700 rounded-full transition-colors border border-white/10 active:scale-90">
-    <Undo size={18}/>
-    {/* --- EXIT BUTTON (New) --- */}
+  <div className="flex gap-2">
+  {/* 1. EXIT BUTTON */}
   <button 
     onClick={handleExitMatch} 
     className="w-10 h-10 flex items-center justify-center bg-red-900/20 text-red-500 hover:bg-red-600 hover:text-white rounded-full transition-colors border border-red-500/30 active:scale-90"
@@ -4722,7 +4720,25 @@ return (
   >
     <LogOut size={18} />
   </button>
+
+  {/* 2. UNDO BUTTON */}
+  <button 
+    onClick={undo} 
+    className="w-10 h-10 flex items-center justify-center bg-neutral-800 text-slate-300 hover:text-white hover:bg-neutral-700 rounded-full transition-colors border border-white/10 active:scale-90"
+  >
+    <Undo size={18}/>
   </button>
+
+  {/* 3. ADD PLAYER BUTTON */}
+  <button onClick={() => setActiveModal('ADD_LATE_PLAYER')} className="w-10 h-10 flex items-center justify-center bg-neutral-800 text-emerald-400 hover:bg-neutral-700 rounded-full transition-colors border border-white/10 active:scale-90">
+    <UserPlus size={18}/>
+  </button>
+
+  {/* 4. SCORECARD BUTTON */}
+  <button onClick={() => setActiveModal('SCORECARD')} className="w-10 h-10 flex items-center justify-center bg-neutral-800 text-blue-400 hover:bg-neutral-700 rounded-full transition-colors border border-white/10 active:scale-90">
+    <ClipboardList size={18}/>
+  </button>
+</div>
  
   {/* NEW: ADD PLAYER BUTTON */}
   <button onClick={() => setActiveModal('ADD_LATE_PLAYER')} className="w-10 h-10 flex items-center justify-center bg-neutral-800 text-emerald-400 hover:bg-neutral-700 rounded-full transition-colors border border-white/10 active:scale-90">
