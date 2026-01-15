@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Trophy, MapPin, ClipboardList, Undo, CloudRain, RotateCcw,
-  Edit2, UserMinus, X, Check, ChevronRight, User, Users,
+  Edit2, UserMinus, X, Check , ChevronRight, User, Users,
   Settings, Plus, Trash2, Upload, Camera, Save, Download, FileJson, RefreshCw,
   BarChart2, Star,UserPlus, TrendingUp, Activity, AlertTriangle, LogOut, HeartPulse,
   Shield, Target, Award, Coins, Mic, Zap, Search, Crown, History, Calendar,
@@ -1790,7 +1790,7 @@ const TeamManagerModal = ({ teams, setTeams, players, onClose }) => {
   );
 };
 // START OF PART 12 - PREMIUM SETUP SCREEN (Nightfire Edition)
-const SetupScreen = ({ teams, players, onStart, onManagePlayers, onManageTeams, onOpenRankings, onOpenProfiles, onExport, onImport, onOpenArchives, onRequestReset }) => {
+const SetupScreen = ({ teams, players, onStart, onManagePlayers, onManageTeams,resumeId, onResume, onManagePlayers, onOpenRankings, onOpenProfiles, onExport, onImport, onOpenArchives, onRequestReset }) => {
   const [t1Id, setT1Id] = useState(teams[0]?.id || '');
   const [t2Id, setT2Id] = useState(teams[1]?.id || '');
   const [jokerId, setJokerId] = useState('');
@@ -1838,7 +1838,28 @@ const SetupScreen = ({ teams, players, onStart, onManagePlayers, onManageTeams, 
           </span>
         </div>
       </div>
-
+{/* --- NEW: RESUME BUTTON --- */}
+      {resumeId && (
+        <div className="mb-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <button
+            onClick={() => onResume(resumeId)}
+            className="w-full relative overflow-hidden group p-5 rounded-2xl bg-gradient-to-r from-emerald-900/40 to-black border border-emerald-500/50 shadow-lg hover:shadow-emerald-500/20 transition-all active:scale-95"
+          >
+            <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+            <div className="flex justify-between items-center">
+               <div className="text-left">
+                  <div className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-1 flex items-center gap-2">
+                     <Activity size={12} className="animate-pulse"/> Match In Progress
+                  </div>
+                  <div className="text-xl font-black text-white italic tracking-tight">Resume Match</div>
+               </div>
+               <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center border border-emerald-500/30 group-hover:bg-emerald-500 group-hover:text-black transition-colors">
+                  <ChevronRight size={20} />
+               </div>
+            </div>
+          </button>
+        </div>
+      )}
       {/* 2. MAIN MENU GRID (Compact Glass Tiles) */}
       <div className="grid grid-cols-2 gap-4 mb-6 animate-in fade-in slide-in-from-bottom-8 duration-700">
         {[
@@ -3025,6 +3046,8 @@ const App = () => {
   
   const [timeline, setTimeline] = useState([]); // Timeline for worm graph
   const [isLoaded, setIsLoaded] = useState(false);
+  // Track the last match ID for the Resume Button
+  const [resumeId, setResumeId] = useState(localStorage.getItem('lastMatchId'));
   // --- CLOUD SYNC LOGIC (Dynamic) ---
   const [matchId, setMatchId] = useState(null); 
 
@@ -3046,6 +3069,11 @@ const App = () => {
     const matchRef = doc(db, "matches", matchId);
     const unsubscribe = onSnapshot(matchRef, (docSnap) => {
       if (docSnap.exists()) {
+        // SAVE FOR RESUME BUTTON
+        if (matchId) {
+            localStorage.setItem('lastMatchId', matchId);
+            setResumeId(matchId);
+        }
         const data = docSnap.data();
 
         // HYDRATE STATE (Load Cloud Data into RAM)
@@ -3349,6 +3377,8 @@ const App = () => {
       localStorage.removeItem('cric_history');
       localStorage.removeItem('cric_series');
       setActiveModal(null);
+      localStorage.removeItem('lastMatchId');
+      setResumeId(null);
       alert("All stats have been reset."); 
   };
 
@@ -4385,6 +4415,12 @@ return (
 {activeModal === 'H2H' && <HeadToHeadModal players={playerPool} matchHistory={matchHistory} onClose={() => setActiveModal(null)} />}
       {/* SCREENS */}
       {gameState === 'SETUP' && <SetupScreen
+    resumeId={resumeId} // <--- NEW PROP
+    onResume={(id) => { // <--- NEW HANDLER
+        setMatchId(id);
+        const newUrl = `${window.location.pathname}?matchId=${id}`;
+        window.history.pushState({ path: newUrl }, '', newUrl);
+    }}
     teams={savedTeams}
     players={playerPool}
     onStart={startMatch}
@@ -4678,6 +4714,14 @@ return (
   {/* UNDO BUTTON */}
   <button onClick={undo} className="w-10 h-10 flex items-center justify-center bg-neutral-800 text-slate-300 hover:text-white hover:bg-neutral-700 rounded-full transition-colors border border-white/10 active:scale-90">
     <Undo size={18}/>
+    {/* --- EXIT BUTTON (New) --- */}
+  <button 
+    onClick={handleExitMatch} 
+    className="w-10 h-10 flex items-center justify-center bg-red-900/20 text-red-500 hover:bg-red-600 hover:text-white rounded-full transition-colors border border-red-500/30 active:scale-90"
+    title="Exit to Menu"
+  >
+    <LogOut size={18} />
+  </button>
   </button>
  
   {/* NEW: ADD PLAYER BUTTON */}
