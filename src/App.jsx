@@ -2273,17 +2273,22 @@ const OpenersModal = ({ squad, teamName, onSelect }) => {
   );
 };
 
-// 2. NEXT BATSMAN SELECTION (High-Contrast Retired Section)
+// 2. NEXT BATSMAN SELECTION (Fixed: Safe String Comparison)
 const PlayerSelectionModal = ({ title, squad, excludeIds, retiredHurtPlayers, onSelect, onClose }) => {
-  const retiredIds = retiredHurtPlayers ? retiredHurtPlayers.map(r => r.id) : [];
-  const allExcluded = [...excludeIds, ...retiredIds];
-  const available = squad.filter(p => !allExcluded.includes(p.id));
+  const retiredIds = retiredHurtPlayers ? retiredHurtPlayers.map(r => String(r.id)) : [];
+  
+  // FIX: Convert all IDs to strings for safe comparison
+  const safeExcludeIds = excludeIds.map(id => String(id));
+  const allExcluded = [...safeExcludeIds, ...retiredIds];
+  
+  // FIX: Use String comparison to ensure we actually show available players
+  const available = squad.filter(p => !allExcluded.includes(String(p.id)));
 
   return (
     <Modal title={title} onClose={onClose}>
       <div className="space-y-6">
        
-        {/* RETIRED HURT SECTION (High Visibility Fix) */}
+        {/* RETIRED HURT SECTION */}
         {retiredHurtPlayers && retiredHurtPlayers.length > 0 && (
           <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
              <div className="flex items-center gap-2 px-1">
@@ -2295,9 +2300,8 @@ const PlayerSelectionModal = ({ title, squad, excludeIds, retiredHurtPlayers, on
              
              <div className="grid grid-cols-1 gap-2">
                 {retiredHurtPlayers.map(rh => {
-                   const p = squad.find(pl => pl.id === rh.id) || { name: 'Unknown' };
+                   const p = squad.find(pl => String(pl.id) === String(rh.id)) || { name: 'Unknown' };
                    return (
-                      // CHANGED: Used 'bg-neutral-800' instead of transparent/black to ensure contrast
                       <button key={rh.id} onClick={() => onSelect(rh.id, true)} className="flex items-center justify-between p-4 bg-neutral-800 border-2 border-red-500/50 hover:border-red-500 hover:bg-neutral-700 rounded-xl group transition-all shadow-lg shadow-red-900/20">
                          <div className="flex items-center gap-4">
                             <div className="relative">
@@ -2347,18 +2351,18 @@ const PlayerSelectionModal = ({ title, squad, excludeIds, retiredHurtPlayers, on
     </Modal>
   );
 };
-// 3. BOWLER SELECTION (With Live Stats & Safe ID Check)
+// 3. BOWLER SELECTION (Fixed: Safe ID Comparison)
 const BowlerSelectionModal = ({ currentOver, squad, lastBowlerId, onSelect, bowlerStats, maxOvers }) => {
   const statsMap = bowlerStats || {};
   const safeSquad = squad || [];
   const limit = (maxOvers && parseInt(maxOvers) > 0) ? parseInt(maxOvers) : Infinity;
 
   const availableBowlers = safeSquad.filter(p => {
-    // FIX: Use String comparison for ID safety. 
-    // This fixes the "Border Issue" where the same bowler could bowl twice.
+    // FIX: String comparison prevents "Duplicate Bowler" bug
     if (String(p.id) === String(lastBowlerId)) return false;
     
-    const stats = statsMap[p.id] || {};
+    // FIX: Handle stats lookup safely
+    const stats = statsMap[p.id] || statsMap[String(p.id)] || {};
     const legal = stats.legalBalls || 0;
     const oversBowled = Math.floor(legal / 6);
     
@@ -2375,7 +2379,8 @@ const BowlerSelectionModal = ({ currentOver, squad, lastBowlerId, onSelect, bowl
         )}
        
         {availableBowlers.map(p => {
-           const stats = statsMap[p.id] || { runs: 0, wickets: 0, legalBalls: 0 };
+           // FIX: Lookup stats with String ID fallback
+           const stats = statsMap[p.id] || statsMap[String(p.id)] || { runs: 0, wickets: 0, legalBalls: 0 };
            const legal = stats.legalBalls || 0;
            const overs = Math.floor(legal / 6) + '.' + (legal % 6);
            
@@ -3087,6 +3092,8 @@ const App = () => {
         if(data.strikerId) setStrikerId(data.strikerId);
         if(data.nonStrikerId) setNonStrikerId(data.nonStrikerId);
         if(data.currentBowlerId) setCurrentBowlerId(data.currentBowlerId);
+        // FIX: Restore 1st Innings Data for Target Calculation
+        if(data.innings1) setFirstInningsData(data.innings1);
         if(data.battingOrder) setBattingOrder(data.battingOrder);
         if(data.matchSettings) setMatchSettings(data.matchSettings);
         if(data.playerPool) setPlayerPool(data.playerPool);
@@ -3207,7 +3214,7 @@ const App = () => {
         : [];
   };
 // START OF PART 19
-  const getCurrentBattingTeamId = () => {
+ const getCurrentBattingTeamId = () => {
     if (gameState === 'INNINGS_1') return matchSettings.battingFirstId;
     if (gameState === 'INNINGS_2') return matchSettings.battingSecondId;
     return null;
@@ -3220,10 +3227,16 @@ const App = () => {
   };
 
   const getBattingSquad = () => {
-    const regular = getTeamPlayers(getCurrentBattingTeamId());
+    // FIX: Ensure ID is treated as string for lookup
+    const teamId = getCurrentBattingTeamId();
+    if (!teamId) return [];
+    
+    const regular = getTeamPlayers(String(teamId));
+    
     if (matchSettings.jokerId) {
         const joker = getPlayer(matchSettings.jokerId);
-        if (!regular.find(p => p.id === joker.id)) {
+        // FIX: Safe comparison
+        if (joker && !regular.find(p => String(p.id) === String(joker.id))) {
             return [...regular, joker];
         }
     }
@@ -3231,17 +3244,21 @@ const App = () => {
   };
 
   const getBowlingSquad = () => {
-      const regular = getTeamPlayers(getCurrentBowlingTeamId());
+      // FIX: Ensure ID is treated as string for lookup
+      const teamId = getCurrentBowlingTeamId();
+      if (!teamId) return [];
+
+      const regular = getTeamPlayers(String(teamId));
+      
       if (matchSettings.jokerId) {
           const joker = getPlayer(matchSettings.jokerId);
-          // Safety check: regular.find could crash if regular has non-objects
-          if (!regular.find(p => p && p.id === joker.id)) {
+          // FIX: Safe comparison
+          if (joker && !regular.find(p => String(p.id) === String(joker.id))) {
               return [...regular, joker];
           }
       }
       return regular;
   };
-
   const generateCommentary = (bowlerName, batterName, runs, extrasType, wicketType) => {
       const ballNum = `${overs}.${balls + 1}`;
       let text = `${ballNum}: ${bowlerName} to ${batterName}, `;
@@ -3923,19 +3940,21 @@ const handleInningsEnd = (finalScore, finalOvers, finalBalls, finalBattingStats,
     const secondInningsBowlingStats = finalBowlerStats || bowlerStats;
 
     if (gameState === 'INNINGS_1') {
-        setFirstInningsData({
+        // 1. Prepare Data Object
+        const i1Data = {
             teamName: savedTeams.find(t => t.id === getCurrentBattingTeamId())?.name,
             runs: finalRuns,
-            wickets: endWickets, // <--- SAVING CORRECT WICKETS
+            wickets: endWickets,
             overs: endOvers,
             balls: endBalls,
             bowlerStats: secondInningsBowlingStats,
             outPlayers: currentOutPlayers,
             battingStats: secondInningsBattingStats,
             timeline: finalTimeline || timeline
-        });
+        };
 
-        // Clear state for 2nd innings
+        // 2. Set Local State
+        setFirstInningsData(i1Data);
         setBattingStats({});
         setBowlerStats({});
         setBattingOrder([]);
@@ -3946,6 +3965,16 @@ const handleInningsEnd = (finalScore, finalOvers, finalBalls, finalBattingStats,
         setBallsAtLastWicket(0);
         setTimeline([]);
         setGameState('INNINGS_BREAK');
+
+        // 3. CRITICAL: Save to Cloud immediately
+        saveToCloud({
+            gameState: 'INNINGS_BREAK',
+            innings1: i1Data, // Persist the score
+            runs: 0, wickets: 0, balls: 0, overs: 0, // Reset cloud live score
+            battingStats: {}, bowlerStats: {}, 
+            timeline: [], commentary: [],
+            strikerId: null, nonStrikerId: null, currentBowlerId: null
+        });
     } else {
         // --- MATCH OVER LOGIC ---
 
@@ -4184,6 +4213,12 @@ const handleInningsEnd = (finalScore, finalOvers, finalBalls, finalBattingStats,
   };
         setMatchHistory(prev => [...prev, finalMatchData]);
         setSelectedArchivedMatch(finalMatchData);
+        // FIX: Tell Cloud the match is over
+        saveToCloud({
+            gameState: 'MATCH_OVER',
+            winnerId: winnerId,
+            finalResult: finalMatchData
+        });
         setGameState('MATCH_OVER');
     }
 };
