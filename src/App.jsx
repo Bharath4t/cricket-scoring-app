@@ -2352,16 +2352,18 @@ const PlayerSelectionModal = ({ title, squad, excludeIds, retiredHurtPlayers, on
   );
 };
 // 3. BOWLER SELECTION (Fixed: Safe ID Comparison)
+// FIX: Updated BowlerSelectionModal with safer limits
 const BowlerSelectionModal = ({ currentOver, squad, lastBowlerId, onSelect, bowlerStats, maxOvers }) => {
   const statsMap = bowlerStats || {};
   const safeSquad = squad || [];
-  const limit = (maxOvers && parseInt(maxOvers) > 0) ? parseInt(maxOvers) : Infinity;
+  // Safety: If limit is missing or 0, allow infinite overs (for testing)
+  const limit = (maxOvers && parseInt(maxOvers) > 0) ? parseInt(maxOvers) : 999;
 
   const availableBowlers = safeSquad.filter(p => {
-    // FIX: String comparison prevents "Duplicate Bowler" bug
+    // 1. Prevent consecutive overs (The Rule)
     if (String(p.id) === String(lastBowlerId)) return false;
     
-    // FIX: Handle stats lookup safely
+    // 2. Check Over Limits
     const stats = statsMap[p.id] || statsMap[String(p.id)] || {};
     const legal = stats.legalBalls || 0;
     const oversBowled = Math.floor(legal / 6);
@@ -2372,14 +2374,16 @@ const BowlerSelectionModal = ({ currentOver, squad, lastBowlerId, onSelect, bowl
   return (
     <Modal title={`Select Bowler: Over ${currentOver}`} onClose={() => {}}>
       <div className="grid grid-cols-1 gap-2 max-h-[500px] overflow-y-auto custom-scrollbar pr-1">
+        {/* Fallback: If logic hides everyone, show message but also show full list below for safety */}
         {availableBowlers.length === 0 && (
-            <p className="text-center text-slate-500 py-10 italic">
-                No eligible bowlers found.<br/>(Check bowler limits)
-            </p>
+            <div className="text-center text-slate-500 py-4 italic text-xs">
+                No eligible bowlers found under current rules.<br/>
+                (Max {limit} overs/bowler)
+            </div>
         )}
        
-        {availableBowlers.map(p => {
-           // FIX: Lookup stats with String ID fallback
+        {/* RENDER LIST: Use availableBowlers, or fallback to full squad if empty (Emergency Mode) */}
+        {(availableBowlers.length > 0 ? availableBowlers : safeSquad).map(p => {
            const stats = statsMap[p.id] || statsMap[String(p.id)] || { runs: 0, wickets: 0, legalBalls: 0 };
            const legal = stats.legalBalls || 0;
            const overs = Math.floor(legal / 6) + '.' + (legal % 6);
@@ -2583,7 +2587,7 @@ const ScorecardModal = ({ matchSettings, teamName, data, players, onClose, batti
   );
 };
 // START OF PART 16 - PREMIUM WICKET MODAL (Nightfire Edition)
-export const WicketModal = ({ squad, striker, nonStriker, onConfirm, onClose }) => {
+export const WicketModal = ({ squad, players, striker, nonStriker, onConfirm, onClose }) => {
   const [type, setType] = useState('Caught');
   const [fielder, setFielder] = useState('');
   // Default victim is the Striker
@@ -2695,7 +2699,10 @@ export const WicketModal = ({ squad, striker, nonStriker, onConfirm, onClose }) 
                     onChange={e => setFielder(e.target.value)}
                  >
                     <option value="">Select Fielder...</option>
-                    {validSquad.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    {/* FIX: Use squad if available, otherwise fallback to all players */}
+                    {(validSquad.length > 0 ? validSquad : players).map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
                  </select>
               </div>
            </div>
@@ -4412,7 +4419,7 @@ return (
           </div>
       </Modal>}
       
-      {activeModal === 'WICKET_DETAIL' && <WicketModal squad={getBowlingSquad()} striker={striker} nonStriker={nonStriker} onConfirm={(type, fielder, victim) => { confirmWicket(type, fielder, victim); }} onClose={() => setActiveModal(null)} />}
+      {activeModal === 'WICKET_DETAIL' && <WicketModal squad={getBowlingSquad()} players={playerPool} striker={striker} nonStriker={nonStriker} onConfirm={(type, fielder, victim) => { confirmWicket(type, fielder, victim); }} onClose={() => setActiveModal(null)} />}
       
       {activeModal === 'RETIRE_OPTIONS' && <Modal title="Retire" onClose={() => setActiveModal(null)}><div className="space-y-4"><button onClick={() => { handleRetire('HURT'); }} className="w-full p-4 bg-orange-700/50 border border-orange-500 rounded-xl flex gap-4"><HeartPulse className="text-orange-400"/><div><div className="font-bold">Retire Hurt</div><div className="text-xs text-slate-300">Can return later</div></div></button></div></Modal>}
       {activeModal === 'OPENERS' && <OpenersModal squad={getBattingSquad()} teamName={savedTeams.find(t=>t.id === getCurrentBattingTeamId())?.name} onSelect={(sId, nsId) => { setStrikerId(sId); setNonStrikerId(nsId); setStrikerStats({runs: 0, balls: 0, fours: 0, sixes: 0}); setNonStrikerStats({runs: 0, balls: 0, fours: 0, sixes: 0}); setBattingOrder([sId, nsId]); setActiveModal('BOWLER'); }} onClose={() => {}} />}
