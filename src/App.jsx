@@ -2354,7 +2354,8 @@ const BowlerSelectionModal = ({ currentOver, squad, lastBowlerId, onSelect, bowl
   const limit = (maxOvers && parseInt(maxOvers) > 0) ? parseInt(maxOvers) : Infinity;
 
   const availableBowlers = safeSquad.filter(p => {
-    // FIX: Use String comparison for ID safety
+    // FIX: Use String comparison for ID safety. 
+    // This fixes the "Border Issue" where the same bowler could bowl twice.
     if (String(p.id) === String(lastBowlerId)) return false;
     
     const stats = statsMap[p.id] || {};
@@ -2409,7 +2410,7 @@ const BowlerSelectionModal = ({ currentOver, squad, lastBowlerId, onSelect, bowl
 };
 // START OF PART 15 - SCORECARD FIX
 const ScorecardModal = ({ matchSettings, teamName, data, players, onClose, battingOrder }) => {
-  // FIX: Robust ID Lookup
+  // FIX: Robust ID Lookup (Safe String Comparison)
   const getP = (id) => players.find(p => String(p.id) === String(id)) || { name: 'Unknown' };
   const extras = data.extras || { wd: 0, nb: 0, lb: 0, b: 0 };
 
