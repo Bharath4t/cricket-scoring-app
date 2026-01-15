@@ -2347,18 +2347,16 @@ const PlayerSelectionModal = ({ title, squad, excludeIds, retiredHurtPlayers, on
     </Modal>
   );
 };
-// 3. BOWLER SELECTION (With Live Stats)
+// 3. BOWLER SELECTION (With Live Stats & Safe ID Check)
 const BowlerSelectionModal = ({ currentOver, squad, lastBowlerId, onSelect, bowlerStats, maxOvers }) => {
   const statsMap = bowlerStats || {};
   const safeSquad = squad || [];
-  // FIX: Force limit to be a valid number, or Infinity if not set
   const limit = (maxOvers && parseInt(maxOvers) > 0) ? parseInt(maxOvers) : Infinity;
 
   const availableBowlers = safeSquad.filter(p => {
-    // 1. Exclude current bowler (standard rule)
-    if (p.id === lastBowlerId) return false;
+    // FIX: Use String comparison for ID safety
+    if (String(p.id) === String(lastBowlerId)) return false;
     
-    // FIX: Safely access legalBalls. Default to 0 if missing.
     const stats = statsMap[p.id] || {};
     const legal = stats.legalBalls || 0;
     const oversBowled = Math.floor(legal / 6);
@@ -2409,12 +2407,12 @@ const BowlerSelectionModal = ({ currentOver, squad, lastBowlerId, onSelect, bowl
     </Modal>
   );
 };
-// START OF PART 15
+// START OF PART 15 - SCORECARD FIX
 const ScorecardModal = ({ matchSettings, teamName, data, players, onClose, battingOrder }) => {
-  const getP = (id) => players.find(p => p.id === id) || { name: 'Unknown' };
+  // FIX: Robust ID Lookup
+  const getP = (id) => players.find(p => String(p.id) === String(id)) || { name: 'Unknown' };
   const extras = data.extras || { wd: 0, nb: 0, lb: 0, b: 0 };
 
-  // Helper for Dismissal Text
   const getDismissalText = (outData) => {
     if (!outData) return "not out";
     const bowlerName = outData.bowlerId ? getP(outData.bowlerId).name : "";
@@ -2436,8 +2434,7 @@ const ScorecardModal = ({ matchSettings, teamName, data, players, onClose, batti
   return (
     <Modal title="Detailed Scorecard" onClose={onClose} maxWidth="max-w-3xl">
       <div className="space-y-6">
-       
-        {/* 1. HERO HEADER: TEAM SCORE */}
+        {/* TEAM HEADER */}
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-neutral-900 to-black border border-white/10 p-6 shadow-2xl">
           <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 blur-[50px] rounded-full"></div>
           <div className="relative z-10 flex justify-between items-end">
@@ -2458,9 +2455,8 @@ const ScorecardModal = ({ matchSettings, teamName, data, players, onClose, batti
           </div>
         </div>
 
-        {/* 2. BATTING CARD */}
+        {/* BATTING CARD */}
         <div className="bg-neutral-900/50 rounded-2xl border border-white/5 overflow-hidden">
-          {/* Section Header */}
           <div className="bg-white/5 p-3 flex items-center justify-between border-b border-white/5">
              <h4 className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-2">
                 <div className="w-1 h-3 bg-orange-500 rounded-full"></div> Batting
@@ -2468,7 +2464,6 @@ const ScorecardModal = ({ matchSettings, teamName, data, players, onClose, batti
              <div className="text-[9px] text-slate-500 uppercase font-bold">Runs (Balls)</div>
           </div>
 
-          {/* Table Headers */}
           <div className="grid grid-cols-[3fr_1fr_1fr_1fr_1fr_1.5fr] gap-2 p-2 bg-black/20 text-[9px] text-slate-500 font-bold uppercase tracking-wider border-b border-white/5">
             <div className="col-span-1 pl-2">Batter</div>
             <div className="text-center">R</div>
@@ -2478,7 +2473,6 @@ const ScorecardModal = ({ matchSettings, teamName, data, players, onClose, batti
             <div className="text-right pr-2">SR</div>
           </div>
 
-          {/* Batting Rows */}
           <div className="divide-y divide-white/5">
             {battingOrder.map((pid, index) => {
               const p = getP(pid);
@@ -2486,30 +2480,32 @@ const ScorecardModal = ({ matchSettings, teamName, data, players, onClose, batti
               let status = '';
               let rowClass = "grid grid-cols-[3fr_1fr_1fr_1fr_1fr_1.5fr] gap-2 p-3 items-center hover:bg-white/5 transition-colors";
              
-              // Active Batter Styling
-              if (pid === data.strikerId) {
+              // FIX: Use String() for safe comparisons
+              if (String(pid) === String(data.strikerId)) {
                 stats = data.strikerStats;
                 status = ' bato';
                 rowClass += ' bg-gradient-to-r from-orange-500/10 to-transparent border-l-2 border-orange-500';
-              } else if (pid === data.nonStrikerId) {
+              } else if (String(pid) === String(data.nonStrikerId)) {
                 stats = data.nonStrikerStats;
                 status = ' bato';
                 rowClass += ' bg-white/[0.02]';
               } else {
-                const outData = data.outPlayers.find(o => o.playerId === pid);
+                // FIX: Safe Find in OutPlayers
+                const outData = data.outPlayers.find(o => String(o.playerId) === String(pid));
                 if (outData) {
                   stats = outData;
                 } else {
-                   const rh = data.retiredHurtPlayers?.find(r => r.id === pid);
+                   // FIX: Safe Find in Retired
+                   const rh = data.retiredHurtPlayers?.find(r => String(r.id) === String(pid));
                    if(rh) { stats = rh.stats; status = ' (ret hurt)'; }
                 }
               }
 
               if (!stats) return null;
              
-              const dismissal = (pid === data.strikerId || pid === data.nonStrikerId)
+              const dismissal = (String(pid) === String(data.strikerId) || String(pid) === String(data.nonStrikerId))
                 ? "not out"
-                : getDismissalText(data.outPlayers.find(o => o.playerId === pid));
+                : getDismissalText(data.outPlayers.find(o => String(o.playerId) === String(pid)));
 
               const sr = stats.balls > 0 ? ((stats.runs/stats.balls)*100).toFixed(0) : '0';
 
@@ -2531,7 +2527,7 @@ const ScorecardModal = ({ matchSettings, teamName, data, players, onClose, batti
               );
             })}
           </div>
-
+          
           {/* Extras Footer */}
           <div className="p-3 text-[10px] font-bold text-slate-400 bg-white/5 flex justify-between items-center border-t border-white/10">
             <span className="uppercase tracking-widest">Extras</span>
@@ -2544,16 +2540,13 @@ const ScorecardModal = ({ matchSettings, teamName, data, players, onClose, batti
           </div>
         </div>
 
-        {/* 3. BOWLING CARD (FIXED ALIGNMENT) */}
+        {/* BOWLING CARD */}
         <div className="bg-neutral-900/50 rounded-2xl border border-white/5 overflow-hidden">
-          {/* Section Header */}
           <div className="bg-white/5 p-3 flex items-center justify-between border-b border-white/5">
              <h4 className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-2">
                 <div className="w-1 h-3 bg-emerald-500 rounded-full"></div> Bowling
              </h4>
           </div>
-
-          {/* Table Headers - UPDATED GRID AND ADDED ECON */}
           <div className="grid grid-cols-[3fr_1fr_1fr_1fr_1.5fr] gap-2 p-2 bg-black/20 text-[9px] text-slate-500 font-bold uppercase tracking-wider border-b border-white/5">
             <div className="col-span-1 pl-2">Bowler</div>
             <div className="text-center">O</div>
@@ -2561,18 +2554,11 @@ const ScorecardModal = ({ matchSettings, teamName, data, players, onClose, batti
             <div className="text-center text-orange-500">W</div>
             <div className="text-right pr-2">Econ</div>
           </div>
-
-          {/* Bowling Rows */}
           <div className="divide-y divide-white/5">
             {Object.entries(data.bowlerStats).map(([id, stats]) => {
-              // 1. Calculate Economy
               const oversDecimal = stats.legalBalls / 6;
-              const economy = oversDecimal > 0
-                ? (stats.runs / oversDecimal).toFixed(1)
-                : "0.0";
-
+              const economy = oversDecimal > 0 ? (stats.runs / oversDecimal).toFixed(1) : "0.0";
               return (
-                // 2. Grid Columns MATCH Header
                 <div key={id} className="grid grid-cols-[3fr_1fr_1fr_1fr_1.5fr] gap-2 p-3 items-center hover:bg-white/5 transition-colors">
                   <div className="col-span-1 pl-2">
                     <div className="text-sm font-medium text-slate-300">{getP(id).name}</div>
@@ -2586,7 +2572,6 @@ const ScorecardModal = ({ matchSettings, teamName, data, players, onClose, batti
             })}
           </div>
         </div>
-
       </div>
     </Modal>
   );
@@ -3200,9 +3185,12 @@ const App = () => {
   }, [playerPool, savedTeams, matchHistory, seriesConfig, firstInningsData, matchSettings, isLoaded]); // <--- ADD matchSettings to dependencies
 
   // FIX 1: Robust Player Lookup - Prevents crash if playerPool has nulls
+ // FIX: Robust Player Lookup - Prevents crash if playerPool has nulls
+  // CHANGE: Added String() conversion to fix ID mismatch bugs
   const getPlayer = (id) => {
       if (!playerPool || !Array.isArray(playerPool)) return { name: 'Unknown', id };
-      const found = playerPool.find(p => p && p.id === id);
+      // FIX: Use String() comparison to match "123" with 123
+      const found = playerPool.find(p => p && String(p.id) === String(id));
       return found || { name: 'Unknown', id };
   };
   
@@ -3694,7 +3682,6 @@ const App = () => {
     pushHistory();
 
     // 1. Prepare New Stats
-    // Even if Non-Striker is out, the ball counts as a ball faced for the Striker (Run Out legal ball)
     const currentStrikerStats = battingStats[strikerId] || { runs: 0, balls: 0, fours: 0, sixes: 0 };
     const newBattingStats = {
         ...battingStats,
@@ -3705,7 +3692,7 @@ const App = () => {
     };
     setBattingStats(newBattingStats);
 
-    // 2. Identify Stats for the Victim (The one actually getting out)
+    // 2. Identify Stats for the Victim
     const isStrikerOut = victimId === strikerId;
     const victimStats = isStrikerOut ? { ...strikerStats, balls: strikerStats.balls + 1 } : nonStrikerStats;
 
@@ -3713,7 +3700,6 @@ const App = () => {
     const outData = { 
         playerId: victimId, 
         runs: victimStats.runs, 
-        // For striker, we added a ball. For non-striker, their balls faced doesn't increment on this ball
         balls: victimStats.balls, 
         howOut: type, 
         fielderId, 
@@ -3737,7 +3723,7 @@ const App = () => {
         totalRuns: runs,
         runRate: runs / (currentTotalOvers || 1),
         isWicket: true,
-        strikerId: strikerId, // Striker is still the one facing
+        strikerId: strikerId,
         bowlerId: currentBowlerId,
         ballRuns: 0
     };
@@ -3782,39 +3768,38 @@ const App = () => {
     }
     setBowlerStats(newBowlerStats);
 
-    // 8. Remove the Victim from the crease
+    // 8. Remove the Victim
     if (isStrikerOut) {
         setStrikerStats({ runs: 0, balls: 0, fours: 0, sixes: 0 });
-        setStrikerId(null); // Striker slot empty
+        setStrikerId(null);
     } else {
         setNonStrikerStats({ runs: 0, balls: 0, fours: 0, sixes: 0 });
-        setNonStrikerId(null); // Non-Striker slot empty
+        setNonStrikerId(null);
     }
 
-    // A. Check if Overs Completed
     if (isOverEnd && nextOvers === matchSettings.totalOvers) {
         handleInningsEnd(runs, nextOvers, 0, newBattingStats, newBowlerStats, finalTimeline, newOutPlayers, newWickets);
         return;
     }
 
+    // --- CRITICAL FIX START: Safe "All Out" Logic ---
     const squadSize = getBattingSquad().length;
-
-    // B. Calculate "All Out"
-    const isAllOut = matchSettings.lastManStanding
+    // Only trigger All Out if we actually HAVE players in the squad (squadSize > 0)
+    // This prevents the "Instant Match End" bug if data is loading
+    const isAllOut = squadSize > 0 && (
+        matchSettings.lastManStanding
         ? newWickets >= squadSize
-        : newWickets >= squadSize - 1;
+        : newWickets >= squadSize - 1
+    );
+    // --- CRITICAL FIX END ---
 
     if (isAllOut) {
         handleInningsEnd(runs, isOverEnd ? nextOvers : overs, isOverEnd ? 0 : newBalls, newBattingStats, newBowlerStats, finalTimeline, newOutPlayers, newWickets);
     } else {
-        // C. Next Batsman Logic
-        if (matchSettings.lastManStanding && newWickets === squadSize - 1) {
-            // LMS: If Non-Striker was out, Striker stays. If Striker was out, Non-Striker becomes Striker.
+        if (matchSettings.lastManStanding && squadSize > 0 && newWickets === squadSize - 1) {
             if (!isStrikerOut) {
-                 // Non-Striker got out. Striker stays alone.
                  setNonStrikerId(null);
             } else {
-                // Striker got out. Non-Striker exists and becomes Main Striker.
                 setStrikerId(nonStrikerId);
                 setStrikerStats(nonStrikerStats);
                 setNonStrikerId(null);
@@ -3822,7 +3807,6 @@ const App = () => {
             }
             if (isOverEnd) setTimeout(() => setActiveModal('BOWLER'), 0);
         } else {
-            // Standard Wicket: Ask for next batsman
             setActiveModal('SELECT_BATSMAN');
         }
     }
@@ -3861,33 +3845,50 @@ const handleAddLatecomer = (teamId, playerDetails, isNewPlayer) => {
   const handleRetire = (type) => {
       pushHistory();
       const isHurt = type === 'HURT';
+      const currentOutCount = outPlayers.length;
+      const currentHurtCount = retiredHurtPlayers.length;
+      let newTotalGone = 0;
+
       if (isHurt) {
           setRetiredHurtPlayers(prev => [...prev, { id: strikerId, stats: strikerStats }]);
+          newTotalGone = currentOutCount + currentHurtCount + 1; 
       } else {
           setRetiredPlayers(prev => [...prev, strikerId]);
-          setOutPlayers(prev => [...prev, { playerId: strikerId, runs: strikerStats.runs, balls: strikerStats.balls, howOut: 'Retired Out', fours: strikerStats.fours, sixes: strikerStats.sixes }]);
+          setOutPlayers(prev => [...prev, { 
+              playerId: strikerId, 
+              runs: strikerStats.runs, 
+              balls: strikerStats.balls, 
+              howOut: 'Retired Out', 
+              fours: strikerStats.fours, 
+              sixes: strikerStats.sixes 
+          }]);
           setWickets(prev => prev + 1);
           setScoreAtLastWicket(runs);
           setBallsAtLastWicket(overs * 6 + balls);
+          newTotalGone = currentOutCount + currentHurtCount + 1;
       }
 
       setStrikerStats({ runs: 0, balls: 0, fours: 0, sixes: 0 });
       setStrikerId(null);
 
       const squadSize = getBattingSquad().length;
-      const totalGone = outPlayers.length + retiredPlayers.length + retiredHurtPlayers.length + (isHurt ? 1 : 0);
-     
-      if (matchSettings.lastManStanding && totalGone >= squadSize - 1) {
-            if (nonStrikerId) {
-                setStrikerId(nonStrikerId);
-                setStrikerStats(nonStrikerStats);
-                setNonStrikerId(null);
-                setNonStrikerStats({ runs: 0, balls: 0, fours: 0, sixes: 0 });
-            } else {
-                 handleInningsEnd();
-            }
-      } else if (!matchSettings.lastManStanding && totalGone >= squadSize - 1) {
-            handleInningsEnd();
+      const limit = matchSettings.lastManStanding ? squadSize : squadSize - 1;
+
+      // FIX: Added (squadSize > 0) check to prevent bugs
+      if (squadSize > 0 && newTotalGone >= limit) {
+             if (matchSettings.lastManStanding && newTotalGone === squadSize - 1) {
+                if (nonStrikerId) {
+                    setStrikerId(nonStrikerId);
+                    setStrikerStats(nonStrikerStats);
+                    setNonStrikerId(null);
+                    setNonStrikerStats({ runs: 0, balls: 0, fours: 0, sixes: 0 });
+                    setTimeout(() => setActiveModal('BOWLER'), 100);
+                } else {
+                     handleInningsEnd();
+                }
+             } else {
+                handleInningsEnd();
+             }
       } else {
             setActiveModal('SELECT_BATSMAN');
       }
